@@ -1,99 +1,83 @@
--- phpMyAdmin SQL Dump
--- version 5.2.1
--- https://www.phpmyadmin.net/
---
--- Host: 127.0.0.1
--- Generation Time: Dec 15, 2024 at 02:12 PM
--- Server version: 10.4.32-MariaDB
--- PHP Version: 8.2.12
+"""
+Simple connection script for the simpletwitterserver database
+hosted on freesqldatabase.com.
 
-SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
-START TRANSACTION;
-SET time_zone = "+00:00";
+Requires: pip install pymysql
+"""
 
+import pymysql
 
-/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
-/*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
-/*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
-/*!40101 SET NAMES utf8mb4 */;
-
---
--- Database: `simpletwitterserver`
---
-
--- --------------------------------------------------------
-
---
--- Table structure for table `accounts`
---
-
-CREATE TABLE `accounts` (
-  `ID` int(11) NOT NULL,
-  `Username` text NOT NULL,
-  `FullName` text NOT NULL,
-  `Email` text NOT NULL,
-  `IsVerified` tinyint(1) NOT NULL,
-  `Password` text NOT NULL,
-  `Salt` text NOT NULL,
-  `Token` text NOT NULL,
-  `RegistrationTS` int(11) NOT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Dumping data for table `accounts`
---
-
--- --------------------------------------------------------
-
---
--- Table structure for table `tweets`
---
-
-CREATE TABLE `tweets` (
-  `ID` int(11) NOT NULL,
-  `PosterUserID` int(11) NOT NULL,
-  `Timestamp` int(11) NOT NULL,
-  `Text` text NOT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Dumping data for table `tweets`
---
+DB_CONFIG = {
+    "host": "sql5.freesqldatabase.com",
+    "port": 3306,
+    "user": "sql5834481",
+    "password": "gRWCi3eqSC",
+    "database": "sql5834481",
+    "charset": "utf8mb4",
+    "cursorclass": pymysql.cursors.DictCursor,
+    "connect_timeout": 10,
+}
 
 
---
--- Indexes for dumped tables
---
+def get_connection():
+    """Open and return a new database connection."""
+    return pymysql.connect(**DB_CONFIG)
 
---
--- Indexes for table `accounts`
---
-ALTER TABLE `accounts`
-  ADD PRIMARY KEY (`ID`);
 
---
--- Indexes for table `tweets`
---
-ALTER TABLE `tweets`
-  ADD PRIMARY KEY (`ID`);
+def test_connection():
+    """Quick sanity check: connect, list tables, print row counts."""
+    try:
+        conn = get_connection()
+    except pymysql.err.OperationalError as e:
+        print(f"Connection failed: {e}")
+        return
 
---
--- AUTO_INCREMENT for dumped tables
---
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SHOW TABLES;")
+            tables = [list(row.values())[0] for row in cur.fetchall()]
+            print(f"Connected. Tables found: {tables}")
 
---
--- AUTO_INCREMENT for table `accounts`
---
-ALTER TABLE `accounts`
-  MODIFY `ID` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=0;
+            for table in tables:
+                cur.execute(f"SELECT COUNT(*) AS cnt FROM `{table}`;")
+                count = cur.fetchone()["cnt"]
+                print(f"  {table}: {count} row(s)")
+    finally:
+        conn.close()
 
---
--- AUTO_INCREMENT for table `tweets`
---
-ALTER TABLE `tweets`
-  MODIFY `ID` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=0;
-COMMIT;
 
-/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
-/*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
-/*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
+def get_accounts():
+    """Fetch all accounts (omit sensitive fields)."""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT ID, Username, FullName, IsVerified, RegistrationTS FROM accounts;"
+            )
+            return cur.fetchall()
+    finally:
+        conn.close()
+
+
+def get_recent_tweets(limit=20):
+    """Fetch the most recent tweets, joined with the poster's username."""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT t.ID, t.Text, t.Timestamp, a.Username
+                FROM tweets t
+                JOIN accounts a ON a.ID = t.PosterUserID
+                ORDER BY t.Timestamp DESC
+                LIMIT %s;
+                """,
+                (limit,),
+            )
+            return cur.fetchall()
+    finally:
+        conn.close()
+
+
+if __name__ == "__main__":
+    test_connection()
